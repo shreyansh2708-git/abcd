@@ -1,11 +1,45 @@
-import React from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { sportsService } from '@/services/mockData';
+import { Sport } from '@/types';
 import { Search, MapPin, Calendar, Star, ArrowRight } from 'lucide-react';
 import heroImage from '@/assets/hero-sports.jpg';
 
 const Hero = () => {
+  const navigate = useNavigate();
+  const [sports, setSports] = useState<Sport[]>([]);
+  const [searchForm, setSearchForm] = useState({
+    sport: 'all',
+    location: '',
+    date: new Date().toISOString().split('T')[0],
+  });
+
+  useEffect(() => {
+    loadSports();
+  }, []);
+
+  const loadSports = async () => {
+    try {
+      const sportsData = await sportsService.getAll();
+      setSports(sportsData);
+    } catch (error) {
+      console.error('Error loading sports:', error);
+    }
+  };
+
+  const handleSearch = () => {
+    const params = new URLSearchParams();
+    if (searchForm.sport) params.set('sport', searchForm.sport);
+    if (searchForm.location) params.set('location', searchForm.location);
+    if (searchForm.date) params.set('date', searchForm.date);
+    
+    navigate(`/venues?${params.toString()}`);
+  };
   const stats = [
     { label: 'Active Venues', value: '200+' },
     { label: 'Happy Players', value: '10K+' },
@@ -52,27 +86,49 @@ const Hero = () => {
               <div className="grid sm:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-muted-foreground">Sport</label>
-                  <div className="flex items-center space-x-2 p-3 rounded-lg border bg-background">
-                    <Search className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">Select sport...</span>
-                  </div>
+                  <Select 
+                    value={searchForm.sport} 
+                    onValueChange={(value) => setSearchForm(prev => ({ ...prev, sport: value }))}
+                  >
+                    <SelectTrigger className="bg-background">
+                      <SelectValue placeholder="Select sport..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All sports</SelectItem>
+                      {sports.map((sport) => (
+                        <SelectItem key={sport.id} value={sport.id}>
+                          {sport.icon} {sport.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-muted-foreground">Location</label>
-                  <div className="flex items-center space-x-2 p-3 rounded-lg border bg-background">
-                    <MapPin className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">Near me...</span>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Enter location..."
+                      value={searchForm.location}
+                      onChange={(e) => setSearchForm(prev => ({ ...prev, location: e.target.value }))}
+                      className="pl-10 bg-background"
+                    />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-muted-foreground">Date</label>
-                  <div className="flex items-center space-x-2 p-3 rounded-lg border bg-background">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">Today</span>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="date"
+                      value={searchForm.date}
+                      onChange={(e) => setSearchForm(prev => ({ ...prev, date: e.target.value }))}
+                      className="pl-10 bg-background"
+                    />
                   </div>
                 </div>
               </div>
-              <Button variant="hero" size="lg" className="w-full mt-4">
+              <Button variant="hero" size="lg" className="w-full mt-4" onClick={handleSearch}>
                 Search Courts
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
@@ -80,7 +136,7 @@ const Hero = () => {
 
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-              <Button variant="premium" size="hero" className="animate-pulse-glow">
+              <Button variant="premium" size="hero" className="animate-pulse-glow" onClick={() => navigate('/venues')}>
                 Explore Venues
               </Button>
               <Button variant="outline" size="hero">

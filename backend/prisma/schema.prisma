@@ -1,0 +1,281 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  phone     String?
+  role      UserRole @default(CUSTOMER)
+  avatar    String?
+  status    UserStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Password authentication
+  password String
+
+  // Relations
+  venues    Venue[]
+  bookings  Booking[]
+  reviews   Review[]
+  reports   Report[] @relation("ReportedBy")
+
+  @@map("users")
+}
+
+model Venue {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  address     String
+  latitude    Float
+  longitude   Float
+  city        String
+  state       String
+  ownerId     String
+  rating      Float    @default(0)
+  reviewCount Int      @default(0)
+  minPrice    Float
+  maxPrice    Float
+  status      VenueStatus @default(PENDING)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  owner       User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  sports      VenueSport[]
+  amenities   VenueAmenity[]
+  photos      VenuePhoto[]
+  courts      Court[]
+  bookings    Booking[]
+  reviews     Review[]
+  operatingHours OperatingHour[]
+
+  @@map("venues")
+}
+
+model Sport {
+  id     String @id @default(cuid())
+  name   String @unique
+  icon   String
+  color  String
+
+  // Relations
+  venues VenueSport[]
+  courts Court[]
+
+  @@map("sports")
+}
+
+model VenueSport {
+  venueId String
+  sportId String
+
+  venue   Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  sport   Sport @relation(fields: [sportId], references: [id], onDelete: Cascade)
+
+  @@id([venueId, sportId])
+  @@map("venue_sports")
+}
+
+model Amenity {
+  id   String @id @default(cuid())
+  name String @unique
+  icon String
+
+  // Relations
+  venues VenueAmenity[]
+
+  @@map("amenities")
+}
+
+model VenueAmenity {
+  venueId   String
+  amenityId String
+
+  venue   Venue   @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  amenity Amenity @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@id([venueId, amenityId])
+  @@map("venue_amenities")
+}
+
+model VenuePhoto {
+  id      String @id @default(cuid())
+  venueId String
+  url     String
+  caption String?
+  order   Int    @default(0)
+
+  venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@map("venue_photos")
+}
+
+model OperatingHour {
+  id       String @id @default(cuid())
+  venueId  String
+  dayOfWeek Int   // 0 = Sunday, 1 = Monday, etc.
+  openTime String // HH:MM format
+  closeTime String // HH:MM format
+  closed   Boolean @default(false)
+
+  venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@unique([venueId, dayOfWeek])
+  @@map("operating_hours")
+}
+
+model Court {
+  id           String @id @default(cuid())
+  venueId      String
+  sportId      String
+  name         String
+  pricePerHour Float
+  status       CourtStatus @default(ACTIVE)
+  amenities    String[] // JSON array of amenity names
+
+  // Relations
+  venue    Venue     @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  sport    Sport     @relation(fields: [sportId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@map("courts")
+}
+
+model Booking {
+  id            String @id @default(cuid())
+  userId        String
+  venueId       String
+  courtId       String
+  date          String // YYYY-MM-DD format
+  startTime     String // HH:MM format
+  endTime       String // HH:MM format
+  duration      Int    // in hours
+  totalPrice    Float
+  status        BookingStatus @default(CONFIRMED)
+  paymentStatus PaymentStatus @default(PENDING)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  cancelledAt   DateTime?
+  notes         String?
+
+  // Relations
+  user   User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  venue  Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
+  court  Court @relation(fields: [courtId], references: [id], onDelete: Cascade)
+  payment Payment?
+
+  @@map("bookings")
+}
+
+model Payment {
+  id            String @id @default(cuid())
+  bookingId     String @unique
+  amount        Float
+  currency      String @default("USD")
+  status        PaymentStatus @default(PENDING)
+  stripeId      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model Review {
+  id        String @id @default(cuid())
+  userId    String
+  venueId   String
+  rating    Int    @db.SmallInt // 1-5
+  comment   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  venue Venue @relation(fields: [venueId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, venueId]) // One review per user per venue
+  @@map("reviews")
+}
+
+model Report {
+  id          String @id @default(cuid())
+  reporterId  String
+  reportedType ReportedType
+  reportedId  String // Can be user ID or venue ID
+  reason      String
+  description String
+  status      ReportStatus @default(PENDING)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  reporter     User   @relation("ReportedBy", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@map("reports")
+}
+
+// Enums
+enum UserRole {
+  CUSTOMER
+  FACILITY_OWNER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  BANNED
+  SUSPENDED
+}
+
+enum VenueStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum CourtStatus {
+  ACTIVE
+  MAINTENANCE
+  INACTIVE
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum ReportedType {
+  USER
+  VENUE
+}
+
+enum ReportStatus {
+  PENDING
+  RESOLVED
+  DISMISSED
+}

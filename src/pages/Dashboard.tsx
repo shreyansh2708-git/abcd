@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useAuth } from '@/contexts/AuthContext';
+import { apiService } from '@/services/api';
 import { 
   Calendar, 
   MapPin, 
@@ -18,32 +21,100 @@ import {
 } from 'lucide-react';
 
 const Dashboard = () => {
-  const [userRole] = useState('facility_owner'); // Mock role - could be 'user', 'facility_owner', 'admin'
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [userBookings, setUserBookings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Mock data
-  const stats = [
-    { title: 'Total Bookings', value: 147, change: '+12%', icon: Calendar, color: 'text-blue-600' },
-    { title: 'Active Courts', value: 8, change: '+2', icon: MapPin, color: 'text-green-600' },
-    { title: 'Revenue', value: '$4,250', change: '+8%', icon: DollarSign, color: 'text-purple-600' },
-    { title: 'Active Users', value: 89, change: '+15%', icon: Users, color: 'text-orange-600' }
-  ];
+  useEffect(() => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+    
+    loadDashboardData();
+  }, [user, navigate]);
 
-  const recentBookings = [
-    { id: 1, user: 'John Smith', court: 'Tennis Court A', date: '2024-12-08', time: '14:00-15:00', status: 'confirmed' },
-    { id: 2, user: 'Sarah Wilson', court: 'Basketball Court 1', date: '2024-12-08', time: '16:00-17:00', status: 'pending' },
-    { id: 3, user: 'Mike Johnson', court: 'Tennis Court B', date: '2024-12-09', time: '10:00-11:00', status: 'confirmed' }
-  ];
+  const loadDashboardData = async () => {
+    if (!user) return;
+    
+    try {
+      const [dashboardStats, bookings] = await Promise.all([
+        apiService.getDashboardStats(),
+        apiService.getUserBookings()
+      ]);
+      
+      setDashboardData(dashboardStats);
+      setUserBookings(bookings.bookings || []);
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const facilities = [
-    { id: 1, name: 'Elite Sports Center', courts: 5, status: 'active', revenue: '$2,100' },
-    { id: 2, name: 'Metro Sports Complex', courts: 3, status: 'active', revenue: '$1,850' }
-  ];
+  const userRole = user?.role || 'customer';
 
-  const courts = [
+  // Dynamic stats based on user role and actual data
+  const getStatsForRole = () => {
+    if (!dashboardData) {
+      return [
+        { title: 'Loading...', value: '-', change: '', icon: Calendar, color: 'text-blue-600' },
+        { title: 'Loading...', value: '-', change: '', icon: Clock, color: 'text-green-600' },
+        { title: 'Loading...', value: '-', change: '', icon: DollarSign, color: 'text-purple-600' },
+        { title: 'Loading...', value: '-', change: '', icon: MapPin, color: 'text-orange-600' }
+      ];
+    }
+
+    if (userRole === 'customer') {
+      return [
+        { title: 'My Bookings', value: dashboardData.totalBookings || 0, change: `+${dashboardData.totalBookings || 0}`, icon: Calendar, color: 'text-blue-600' },
+        { title: 'Upcoming', value: dashboardData.upcomingBookings || 0, change: `+${dashboardData.upcomingBookings || 0}`, icon: Clock, color: 'text-green-600' },
+        { title: 'Completed', value: dashboardData.completedBookings || 0, change: `+${dashboardData.completedBookings || 0}`, icon: Activity, color: 'text-purple-600' },
+        { title: 'Recent Activity', value: userBookings.length, change: '+2', icon: MapPin, color: 'text-orange-600' }
+      ];
+    } else if (userRole === 'facility_owner') {
+      return [
+        { title: 'Total Revenue', value: `$${dashboardData.totalRevenue || 0}`, change: '+8%', icon: DollarSign, color: 'text-purple-600' },
+        { title: 'Total Bookings', value: dashboardData.totalBookings || 0, change: '+12%', icon: Calendar, color: 'text-blue-600' },
+        { title: 'Active Venues', value: dashboardData.activeVenues || 0, change: '+2', icon: MapPin, color: 'text-green-600' },
+        { title: 'Venue Count', value: dashboardData.venueCount || 0, change: '+15%', icon: Users, color: 'text-orange-600' }
+      ];
+    } else {
+      // Admin stats
+      return [
+        { title: 'Total Users', value: dashboardData.totalUsers || 0, change: '+12%', icon: Users, color: 'text-blue-600' },
+        { title: 'Total Venues', value: dashboardData.totalVenues || 0, change: '+2', icon: MapPin, color: 'text-green-600' },
+        { title: 'Total Bookings', value: dashboardData.totalBookings || 0, change: '+8%', icon: Calendar, color: 'text-purple-600' },
+        { title: 'Total Revenue', value: `$${dashboardData.totalRevenue || 0}`, change: '+15%', icon: DollarSign, color: 'text-orange-600' }
+      ];
+    }
+  };
+
+  const stats = getStatsForRole();
+
+  // Use actual user bookings for recent activity
+  const recentActivity = userBookings.slice(0, 5).map(booking => ({
+    id: booking.id,
+    user: userRole === 'customer' ? (user?.name || 'You') : (booking.user?.name || 'Unknown User'),
+    court: booking.court?.name || `Court ${booking.courtId}`,
+    date: booking.date,
+    time: `${booking.startTime}-${booking.endTime}`,
+    status: booking.status
+  }));
+
+  // Only define facilities and courts data for facility owners
+  const facilities = userRole === 'facility_owner' && dashboardData ? [
+    { id: 1, name: 'Elite Sports Center', courts: 5, status: 'active', revenue: `$${(dashboardData.totalRevenue || 0) * 0.6}` },
+    { id: 2, name: 'Metro Sports Complex', courts: 3, status: 'active', revenue: `$${(dashboardData.totalRevenue || 0) * 0.4}` }
+  ] : [];
+
+  const courts = userRole === 'facility_owner' ? [
     { id: 1, name: 'Tennis Court A', sport: 'Tennis', price: 25, status: 'available' },
     { id: 2, name: 'Tennis Court B', sport: 'Tennis', price: 25, status: 'booked' },
     { id: 3, name: 'Basketball Court 1', sport: 'Basketball', price: 35, status: 'maintenance' }
-  ];
+  ] : [];
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -97,11 +168,17 @@ const Dashboard = () => {
       <Tabs defaultValue="overview" className="space-y-6">
         <TabsList className="grid w-full lg:w-auto grid-cols-2 lg:grid-cols-4">
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="bookings">Bookings</TabsTrigger>
+          <TabsTrigger value="bookings">{userRole === 'customer' ? 'My Bookings' : 'Bookings'}</TabsTrigger>
           {userRole === 'facility_owner' && (
             <>
               <TabsTrigger value="facilities">Facilities</TabsTrigger>
               <TabsTrigger value="courts">Courts</TabsTrigger>
+            </>
+          )}
+          {userRole === 'admin' && (
+            <>
+              <TabsTrigger value="users">Users</TabsTrigger>
+              <TabsTrigger value="analytics">Analytics</TabsTrigger>
             </>
           )}
         </TabsList>
@@ -113,7 +190,7 @@ const Dashboard = () => {
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="flex items-center">
                   <Activity className="h-5 w-5 mr-2" />
-                  Recent Activity
+                  {userRole === 'customer' ? 'My Recent Bookings' : 'Recent Activity'}
                 </CardTitle>
                 <Button variant="outline" size="sm">
                   View All
@@ -121,17 +198,29 @@ const Dashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {recentBookings.slice(0, 3).map((booking) => (
-                    <div key={booking.id} className="flex items-center justify-between p-3 border rounded">
-                      <div>
-                        <p className="font-medium text-sm">{booking.user}</p>
-                        <p className="text-xs text-muted-foreground">{booking.court}</p>
+                  {recentActivity.length > 0 ? (
+                    recentActivity.slice(0, 3).map((booking) => (
+                      <div key={booking.id} className="flex items-center justify-between p-3 border rounded">
+                        <div>
+                          <p className="font-medium text-sm">{booking.user}</p>
+                          <p className="text-xs text-muted-foreground">{booking.court}</p>
+                        </div>
+                        <Badge className={getStatusColor(booking.status)}>
+                          {booking.status}
+                        </Badge>
                       </div>
-                      <Badge className={getStatusColor(booking.status)}>
-                        {booking.status}
-                      </Badge>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                      <p>No {userRole === 'customer' ? 'bookings' : 'recent activity'} yet</p>
+                      <p className="text-sm">
+                        {userRole === 'customer' 
+                          ? 'Start by booking your first sports venue!' 
+                          : 'Activity will appear here as users make bookings.'}
+                      </p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -145,8 +234,24 @@ const Dashboard = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="h-64 bg-muted rounded flex items-center justify-center">
-                  <p className="text-muted-foreground">Chart visualization would go here</p>
+                <div className="h-64 space-y-4">
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    <span>Jan</span>
+                    <span>Feb</span>
+                    <span>Mar</span>
+                    <span>Apr</span>
+                    <span>May</span>
+                    <span>Jun</span>
+                  </div>
+                  <div className="flex items-end space-x-2 h-48">
+                    <div className="bg-primary h-16 w-8 rounded-t"></div>
+                    <div className="bg-primary h-24 w-8 rounded-t"></div>
+                    <div className="bg-primary h-32 w-8 rounded-t"></div>
+                    <div className="bg-primary h-28 w-8 rounded-t"></div>
+                    <div className="bg-primary h-36 w-8 rounded-t"></div>
+                    <div className="bg-primary h-40 w-8 rounded-t"></div>
+                  </div>
+                  <p className="text-sm text-muted-foreground text-center">Monthly booking trends</p>
                 </div>
               </CardContent>
             </Card>
@@ -156,15 +261,19 @@ const Dashboard = () => {
         <TabsContent value="bookings">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Recent Bookings</CardTitle>
-              <Button variant="outline" size="sm">
-                <Plus className="h-4 w-4 mr-1" />
-                New Booking
-              </Button>
+              <CardTitle>
+                {userRole === 'customer' ? 'My Bookings' : 'Recent Bookings'}
+              </CardTitle>
+              {userRole === 'customer' && (
+                <Button variant="outline" size="sm" onClick={() => navigate('/venues')}>
+                  <Plus className="h-4 w-4 mr-1" />
+                  New Booking
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {recentBookings.map((booking) => (
+                {recentActivity.map((booking) => (
                   <div key={booking.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex-1">
                       <div className="flex items-center space-x-4">

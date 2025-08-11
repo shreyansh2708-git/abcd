@@ -1,63 +1,158 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { User, Mail, Phone, MapPin, Calendar, Edit3, Save, X } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Calendar, Edit3, Save, X, Loader2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { apiService } from '@/services/api';
+import { useToast } from '@/hooks/use-toast';
 
 const Profile = () => {
+  const { user, userStats, updateProfile, refreshStats } = useAuth();
+  const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [recentBookings, setRecentBookings] = useState<any[]>([]);
   const [formData, setFormData] = useState({
-    name: 'John Doe',
-    email: 'john.doe@example.com',
-    phone: '+1 (555) 123-4567',
-    location: 'New York, NY',
-    joinDate: '2024-01-15',
-    avatar: '/api/placeholder/150/150'
+    name: '',
+    email: '',
+    phone: '',
   });
 
-  const stats = [
-    { label: 'Total Bookings', value: 24, color: 'bg-primary' },
-    { label: 'Completed Games', value: 18, color: 'bg-success' },
-    { label: 'Favorite Sport', value: 'Tennis', color: 'bg-secondary' },
-    { label: 'Member Since', value: '2024', color: 'bg-accent' }
-  ];
+  // Initialize form data when user data loads
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        name: user.name,
+        email: user.email,
+        phone: user.phone || '',
+      });
+    }
+  }, [user]);
 
-  const recentBookings = [
-    { id: 1, venue: 'Elite Sports Center', court: 'Tennis Court A', date: '2024-12-08', status: 'completed' },
-    { id: 2, venue: 'Metro Sports Complex', court: 'Basketball Court 1', date: '2024-12-10', status: 'upcoming' },
-    { id: 3, venue: 'City Sports Club', court: 'Badminton Court 2', date: '2024-12-12', status: 'upcoming' }
+  // Load recent bookings
+  useEffect(() => {
+    const loadRecentBookings = async () => {
+      try {
+        const response = await apiService.getUserBookings();
+        // Take only the most recent 5 bookings
+        setRecentBookings(response.bookings.slice(0, 5));
+      } catch (error) {
+        console.error('Failed to load bookings:', error);
+      }
+    };
+
+    if (user) {
+      loadRecentBookings();
+    }
+  }, [user]);
+
+  const stats = [
+    { 
+      label: 'Total Bookings', 
+      value: userStats?.totalBookings || 0, 
+      color: 'bg-primary' 
+    },
+    { 
+      label: 'Completed Games', 
+      value: userStats?.completedBookings || 0, 
+      color: 'bg-success' 
+    },
+    { 
+      label: 'Upcoming Games', 
+      value: userStats?.upcomingBookings || 0, 
+      color: 'bg-secondary' 
+    },
+    { 
+      label: 'Total Spent', 
+      value: userStats?.totalSpent ? `$${userStats.totalSpent}` : '$0', 
+      color: 'bg-accent' 
+    }
   ];
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSave = () => {
-    // Mock save functionality
-    setIsEditing(false);
-    alert('Profile updated successfully!');
+  const handleSave = async () => {
+    if (!user) return;
+    
+    setIsLoading(true);
+    try {
+      await updateProfile({
+        name: formData.name,
+        phone: formData.phone,
+      });
+      setIsEditing(false);
+      toast({
+        title: "Success",
+        description: "Profile updated successfully!",
+      });
+      // Refresh stats after profile update
+      await refreshStats();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update profile",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleCancel = () => {
+    if (user) {
+      setFormData({
+        name: user.name,
+        email: user.email,
+        phone: user.phone || '',
+      });
+    }
     setIsEditing(false);
-    // Reset form data to original values
   };
 
   const getStatusColor = (status: string) => {
-    switch (status) {
+    switch (status.toLowerCase()) {
       case 'completed':
-        return 'bg-success text-success-foreground';
+        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+      case 'confirmed':
       case 'upcoming':
-        return 'bg-primary text-primary-foreground';
+        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
       case 'cancelled':
-        return 'bg-destructive text-destructive-foreground';
+        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+      case 'no_show':
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
       default:
-        return 'bg-muted text-muted-foreground';
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
     }
   };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
+  const formatStatus = (status: string) => {
+    return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase().replace('_', ' ');
+  };
+
+  // Show loading state if user data is not yet available
+  if (!user) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -73,31 +168,31 @@ const Profile = () => {
             <CardHeader className="text-center">
               <div className="flex justify-center mb-4">
                 <Avatar className="h-24 w-24">
-                  <AvatarImage src={formData.avatar} alt={formData.name} />
+                  <AvatarImage src={user.avatar} alt={user.name} />
                   <AvatarFallback className="text-2xl">
-                    {formData.name.split(' ').map(n => n[0]).join('')}
+                    {user.name.split(' ').map(n => n[0]).join('')}
                   </AvatarFallback>
                 </Avatar>
               </div>
-              <CardTitle className="text-xl">{formData.name}</CardTitle>
-              <Badge variant="secondary" className="w-fit mx-auto">Sports Enthusiast</Badge>
+              <CardTitle className="text-xl">{user.name}</CardTitle>
+              <Badge variant="secondary" className="w-fit mx-auto">
+                {user.role === 'facility_owner' ? 'Facility Owner' : 'Sports Enthusiast'}
+              </Badge>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center space-x-3">
                 <Mail className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">{formData.email}</span>
+                <span className="text-sm">{user.email}</span>
               </div>
-              <div className="flex items-center space-x-3">
-                <Phone className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">{formData.phone}</span>
-              </div>
-              <div className="flex items-center space-x-3">
-                <MapPin className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">{formData.location}</span>
-              </div>
+              {user.phone && (
+                <div className="flex items-center space-x-3">
+                  <Phone className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm">{user.phone}</span>
+                </div>
+              )}
               <div className="flex items-center space-x-3">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm">Joined {new Date(formData.joinDate).toLocaleDateString()}</span>
+                <span className="text-sm">Joined {formatDate(user.createdAt.toString())}</span>
               </div>
             </CardContent>
           </Card>
@@ -129,11 +224,20 @@ const Profile = () => {
               <div className="flex space-x-2">
                 {isEditing ? (
                   <>
-                    <Button onClick={handleSave} size="sm" variant="success">
-                      <Save className="h-4 w-4 mr-1" />
+                    <Button 
+                      onClick={handleSave} 
+                      size="sm" 
+                      disabled={isLoading}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      {isLoading ? (
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      ) : (
+                        <Save className="h-4 w-4 mr-1" />
+                      )}
                       Save
                     </Button>
-                    <Button onClick={handleCancel} size="sm" variant="outline">
+                    <Button onClick={handleCancel} size="sm" variant="outline" disabled={isLoading}>
                       <X className="h-4 w-4 mr-1" />
                       Cancel
                     </Button>
@@ -163,16 +267,9 @@ const Profile = () => {
                 
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
-                  {isEditing ? (
-                    <Input
-                      id="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => handleInputChange('email', e.target.value)}
-                    />
-                  ) : (
-                    <div className="p-2 bg-muted rounded">{formData.email}</div>
-                  )}
+                  <div className="p-2 bg-muted rounded text-muted-foreground">
+                    {formData.email} (cannot be changed)
+                  </div>
                 </div>
                 
                 <div className="space-y-2">
@@ -182,22 +279,12 @@ const Profile = () => {
                       id="phone"
                       value={formData.phone}
                       onChange={(e) => handleInputChange('phone', e.target.value)}
+                      placeholder="Enter phone number"
                     />
                   ) : (
-                    <div className="p-2 bg-muted rounded">{formData.phone}</div>
-                  )}
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="location">Location</Label>
-                  {isEditing ? (
-                    <Input
-                      id="location"
-                      value={formData.location}
-                      onChange={(e) => handleInputChange('location', e.target.value)}
-                    />
-                  ) : (
-                    <div className="p-2 bg-muted rounded">{formData.location}</div>
+                    <div className="p-2 bg-muted rounded">
+                      {formData.phone || 'Not provided'}
+                    </div>
                   )}
                 </div>
               </div>
@@ -211,20 +298,28 @@ const Profile = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {recentBookings.map((booking) => (
-                  <div key={booking.id} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div>
-                      <h4 className="font-medium">{booking.venue}</h4>
-                      <p className="text-sm text-muted-foreground">{booking.court}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium">{booking.date}</p>
-                      <Badge className={getStatusColor(booking.status)}>
-                        {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                      </Badge>
-                    </div>
+                {recentBookings.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    No bookings yet. Start exploring venues to make your first booking!
                   </div>
-                ))}
+                ) : (
+                  recentBookings.map((booking) => (
+                    <div key={booking.id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div>
+                        <h4 className="font-medium">{booking.venue?.name || 'Unknown Venue'}</h4>
+                        <p className="text-sm text-muted-foreground">
+                          {booking.court?.name || 'Court'} - {booking.startTime} to {booking.endTime}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-medium">{formatDate(booking.date)}</p>
+                        <Badge className={getStatusColor(booking.status)}>
+                          {formatStatus(booking.status)}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
