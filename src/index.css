@@ -1,0 +1,243 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* QuickCourt Sports Booking Platform Design System 
+Inspired by Odoo's elegant white and maroon theme */
+
+@layer base {
+  :root {
+    /* Core colors - QuickCourt branding */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 5%;
+    
+    /* Maroon primary theme */
+    --primary: 0 60% 25%; /* Deep maroon */
+    --primary-foreground: 0 0% 98%;
+    --primary-light: 0 50% 35%; /* Lighter maroon for hover */
+    --primary-glow: 0 40% 45%; /* Maroon glow effect */
+    
+    /* Supporting colors */
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 15%;
+    
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+    
+    --accent: 0 5% 96%;
+    --accent-foreground: 0 60% 25%;
+    
+    /* Cards and surfaces */
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 5%;
+    --surface: 0 0% 98%;
+    
+    /* Interactive elements */
+    --border: 0 0% 90%;
+    --input: 0 0% 95%;
+    --ring: 0 60% 25%;
+    
+    /* Status colors */
+    --success: 120 50% 40%;
+    --success-foreground: 0 0% 98%;
+    --warning: 45 90% 55%;
+    --warning-foreground: 0 0% 5%;
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 98%;
+    
+    /* Popover */
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 5%;
+    
+    /* Sports specific colors */
+    --sport-tennis: 120 50% 45%;
+    --sport-basketball: 25 90% 55%;
+    --sport-football: 0 60% 35%;
+    --sport-badminton: 280 60% 50%;
+    
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-light)));
+    --gradient-hero: linear-gradient(135deg, hsl(var(--primary) / 0.95), hsl(var(--primary-light) / 0.9));
+    --gradient-card: linear-gradient(145deg, hsl(var(--card)), hsl(var(--surface)));
+    
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 hsl(var(--primary) / 0.05);
+    --shadow-md: 0 4px 12px -2px hsl(var(--primary) / 0.15);
+    --shadow-lg: 0 10px 30px -10px hsl(var(--primary) / 0.25);
+    --shadow-glow: 0 0 20px hsl(var(--primary-glow) / 0.3);
+    
+    /* Border radius */
+    --radius: 0.75rem;
+    --radius-sm: 0.5rem;
+    --radius-lg: 1rem;
+    
+    /* Transitions */
+    --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-slow: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .dark {
+    /* Dark mode - maroon theme maintained */
+    --background: 0 0% 8%;
+    --foreground: 0 0% 95%;
+    
+    --primary: 0 50% 45%; /* Lighter maroon for dark mode */
+    --primary-foreground: 0 0% 5%;
+    --primary-light: 0 45% 55%;
+    --primary-glow: 0 40% 60%;
+    
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 85%;
+    
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 55%;
+    
+    --accent: 0 0% 15%;
+    --accent-foreground: 0 50% 45%;
+    
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 95%;
+    --surface: 0 0% 12%;
+    
+    --border: 0 0% 18%;
+    --input: 0 0% 15%;
+    --ring: 0 50% 45%;
+    
+    --success: 120 40% 50%;
+    --warning: 45 80% 60%;
+    --destructive: 0 60% 55%;
+    
+    --popover: 0 0% 10%;
+    --popover-foreground: 0 0% 95%;
+    
+    /* Adjusted gradients for dark mode */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-light)));
+    --gradient-hero: linear-gradient(135deg, hsl(var(--background)), hsl(var(--surface)));
+    --gradient-card: linear-gradient(145deg, hsl(var(--card)), hsl(var(--surface)));
+    
+    --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.3);
+    --shadow-md: 0 4px 12px -2px hsl(0 0% 0% / 0.4);
+    --shadow-lg: 0 10px 30px -10px hsl(0 0% 0% / 0.5);
+    --shadow-glow: 0 0 20px hsl(var(--primary-glow) / 0.4);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border transition-colors;
+  }
+  
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+  
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-muted;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-primary/30 rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-primary/50;
+  }
+}
+
+@layer components {
+  /* Hero section styles */
+  .hero-gradient {
+    background: var(--gradient-hero);
+  }
+  
+  /* Card hover effects */
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1;
+  }
+  
+  /* Button glow effect */
+  .btn-glow {
+    box-shadow: var(--shadow-glow);
+  }
+  
+  /* Sport category colors */
+  .sport-tennis { @apply bg-green-500 text-white; }
+  .sport-basketball { @apply bg-orange-500 text-white; }
+  .sport-football { @apply bg-primary text-primary-foreground; }
+  .sport-badminton { @apply bg-purple-500 text-white; }
+  
+  /* Utility classes */
+  .text-gradient {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  
+  /* Animations */
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  @keyframes slideInRight {
+    from {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  
+  @keyframes pulse-glow {
+    0%, 100% {
+      box-shadow: 0 0 20px hsl(var(--primary-glow) / 0.2);
+    }
+    50% {
+      box-shadow: 0 0 30px hsl(var(--primary-glow) / 0.4);
+    }
+  }
+  
+  .animate-fade-in-up {
+    animation: fadeInUp 0.6s ease-out;
+  }
+  
+  .animate-slide-in-right {
+    animation: slideInRight 0.6s ease-out;
+  }
+  
+  .animate-pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
