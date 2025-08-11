@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/AuthContext';
-import { venueService } from '@/services/mockData';
+import { apiService } from '@/services/api';
 import { Venue, Court } from '@/types';
 import { MapPin, Star, Clock, DollarSign, Users, Wifi, Car, Coffee, Shield, Calendar, Phone, Mail, ArrowLeft } from 'lucide-react';
 
@@ -15,7 +15,7 @@ const VenueDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [venue, setVenue] = useState<Venue | null>(null);
+  const [venue, setVenue] = useState<any | null>(null); // Using any for now due to API structure differences
   const [courts, setCourts] = useState<Court[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState(0);
@@ -28,14 +28,39 @@ const VenueDetails = () => {
 
   const loadVenueData = async (venueId: string) => {
     try {
-      const [venueData, courtsData] = await Promise.all([
-        venueService.getById(venueId),
-        venueService.getCourts(venueId),
-      ]);
+      const venueData = await apiService.getVenueById(venueId);
       
       if (venueData) {
-        setVenue(venueData);
-        setCourts(courtsData);
+        // Transform the data to match expected structure
+        const transformedVenue = {
+          ...venueData,
+          location: venueData.location || { 
+            city: venueData.city, 
+            state: venueData.state,
+            latitude: venueData.latitude,
+            longitude: venueData.longitude
+          },
+          priceRange: venueData.priceRange || { 
+            min: venueData.minPrice, 
+            max: venueData.maxPrice 
+          },
+          photos: venueData.photos?.map((photo: any) => 
+            typeof photo === 'string' ? photo : photo.url
+          ) || [],
+          operatingHours: venueData.operatingHours || [],
+          amenities: venueData.amenities?.map((amenity: any) => 
+            typeof amenity === 'string' ? amenity : amenity.name
+          ) || []
+        };
+        
+        setVenue(transformedVenue);
+        
+        // Set courts from venue data if available
+        if (venueData.courts && Array.isArray(venueData.courts)) {
+          setCourts(venueData.courts);
+        } else {
+          setCourts([]);
+        }
       } else {
         // Venue not found
         navigate('/venues');
@@ -139,7 +164,7 @@ const VenueDetails = () => {
           <div className="lg:w-2/3">
             <div className="mb-4">
               <div className="h-96 bg-muted rounded-lg flex items-center justify-center overflow-hidden">
-                {venue.photos[selectedImage] ? (
+                {venue.photos && venue.photos.length > 0 && venue.photos[selectedImage] ? (
                   <img 
                     src={venue.photos[selectedImage]} 
                     alt={venue.name}
@@ -150,9 +175,9 @@ const VenueDetails = () => {
                 )}
               </div>
             </div>
-            {venue.photos.length > 1 && (
+            {venue.photos && venue.photos.length > 1 && (
               <div className="flex gap-2 overflow-x-auto">
-                {venue.photos.map((photo, index) => (
+                {venue.photos.map((photo: string, index: number) => (
                   <button
                     key={index}
                     onClick={() => setSelectedImage(index)}
@@ -192,7 +217,7 @@ const VenueDetails = () => {
                 </div>
                 
                 <div className="flex flex-wrap gap-2 mb-4">
-                  {venue.sports.map((sport) => (
+                  {venue.sports && venue.sports.map((sport: any) => (
                     <Badge key={sport.id} variant="secondary">
                       {sport.icon} {sport.name}
                     </Badge>
@@ -222,7 +247,7 @@ const VenueDetails = () => {
                 <div className="space-y-3">
                   <h4 className="font-semibold">Amenities</h4>
                   <div className="grid grid-cols-1 gap-2">
-                    {venue.amenities.map((amenity, index) => {
+                    {venue.amenities && venue.amenities.length > 0 ? venue.amenities.map((amenity: string, index: number) => {
                       const IconComponent = getAmenityIcon(amenity);
                       return (
                         <div key={index} className="flex items-center text-sm">
@@ -230,7 +255,9 @@ const VenueDetails = () => {
                           {amenity}
                         </div>
                       );
-                    })}
+                    }) : (
+                      <div className="text-sm text-muted-foreground">No amenities listed</div>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -260,14 +287,23 @@ const VenueDetails = () => {
                 <div>
                   <h4 className="font-semibold mb-3">Operating Hours</h4>
                   <div className="space-y-2">
-                    {Object.entries(venue.operatingHours).map(([day, hours]) => (
-                      <div key={day} className="flex justify-between text-sm">
-                        <span className="font-medium">{day}</span>
-                        <span className={hours.closed ? "text-muted-foreground" : ""}>
-                          {hours.closed ? 'Closed' : `${hours.open} - ${hours.close}`}
-                        </span>
-                      </div>
-                    ))}
+                    {venue.operatingHours && Array.isArray(venue.operatingHours) ? 
+                      venue.operatingHours.map((hours: any, index: number) => {
+                        const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                        const dayName = dayNames[hours.dayOfWeek] || `Day ${hours.dayOfWeek}`;
+                        
+                        return (
+                          <div key={index} className="flex justify-between text-sm">
+                            <span className="font-medium">{dayName}</span>
+                            <span className={hours.closed ? "text-muted-foreground" : ""}>
+                              {hours.closed ? 'Closed' : `${hours.openTime} - ${hours.closeTime}`}
+                            </span>
+                          </div>
+                        );
+                      }) : (
+                        <div className="text-sm text-muted-foreground">Operating hours not available</div>
+                      )
+                    }
                   </div>
                 </div>
                 
@@ -299,45 +335,52 @@ const VenueDetails = () => {
               <CardTitle>Available Courts</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {courts.map((court) => (
-                  <Card key={court.id} className="p-4 border">
-                    <div className="flex justify-between items-start mb-3">
-                      <h4 className="font-semibold">{court.name}</h4>
-                      <Badge 
-                        variant={court.status === 'active' ? 'default' : 'secondary'}
-                        className="text-xs"
-                      >
-                        {court.status}
-                      </Badge>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Sport</span>
-                        <span>{venue.sports.find(s => s.id === court.sportId)?.name}</span>
+              {courts.length > 0 ? (
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {courts.map((court: any) => (
+                    <Card key={court.id} className="p-4 border">
+                      <div className="flex justify-between items-start mb-3">
+                        <h4 className="font-semibold">{court.name}</h4>
+                        <Badge 
+                          variant={court.status === 'ACTIVE' ? 'default' : 'secondary'}
+                          className="text-xs"
+                        >
+                          {court.status?.toLowerCase() || 'active'}
+                        </Badge>
                       </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Price</span>
-                        <span className="font-medium">${court.pricePerHour}/hr</span>
-                      </div>
-                    </div>
-                    
-                    {court.amenities.length > 0 && (
-                      <div className="mt-3">
-                        <p className="text-xs text-muted-foreground mb-1">Features:</p>
-                        <div className="flex flex-wrap gap-1">
-                          {court.amenities.map((amenity, index) => (
-                            <Badge key={index} variant="outline" className="text-xs">
-                              {amenity}
-                            </Badge>
-                          ))}
+                      
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Sport</span>
+                          <span>{court.sport?.name || venue.sports?.[0]?.name || 'Multi-sport'}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Price</span>
+                          <span className="font-medium">${court.pricePerHour || venue.priceRange?.min || 'N/A'}/hr</span>
                         </div>
                       </div>
-                    )}
-                  </Card>
-                ))}
-              </div>
+                      
+                      {court.amenities && court.amenities.length > 0 && (
+                        <div className="mt-3">
+                          <p className="text-xs text-muted-foreground mb-1">Features:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {court.amenities.map((amenity: any, index: number) => (
+                              <Badge key={index} variant="outline" className="text-xs">
+                                {typeof amenity === 'string' ? amenity : amenity.name || 'Feature'}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center text-muted-foreground py-8">
+                  <div className="text-lg font-medium mb-2">No courts listed</div>
+                  <p>Court information is not available for this venue.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -349,15 +392,21 @@ const VenueDetails = () => {
             </CardHeader>
             <CardContent>
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {venue.amenities.map((amenity, index) => {
-                  const IconComponent = getAmenityIcon(amenity);
+                {venue.amenities && venue.amenities.length > 0 ? venue.amenities.map((amenity: any, index: number) => {
+                  // Handle both string amenities and object amenities with name property
+                  const amenityName = typeof amenity === 'string' ? amenity : amenity.name || amenity.amenity?.name || 'Unknown';
+                  const IconComponent = getAmenityIcon(amenityName);
                   return (
                     <div key={index} className="flex items-center p-4 border rounded-lg">
                       <IconComponent className="h-6 w-6 mr-3 text-primary" />
-                      <span className="font-medium">{amenity}</span>
+                      <span className="font-medium">{amenityName}</span>
                     </div>
                   );
-                })}
+                }) : (
+                  <div className="text-center text-muted-foreground py-8">
+                    No amenities listed for this venue
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

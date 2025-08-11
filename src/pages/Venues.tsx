@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -6,12 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { venueService, sportsService } from '@/services/mockData';
+import { apiService } from '@/services/api';
 import { Venue, Sport } from '@/types';
 import { MapPin, Star, Clock, DollarSign, Search, Filter, Grid, List } from 'lucide-react';
 
 const Venues = () => {
-  const [venues, setVenues] = useState<Venue[]>([]);
+  const [allVenues, setAllVenues] = useState<Venue[]>([]);
   const [sports, setSports] = useState<Sport[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -26,18 +26,21 @@ const Venues = () => {
     loadData();
   }, []);
 
+  // Separate effect for non-search filters to avoid unnecessary API calls
   useEffect(() => {
-    applyFilters();
-  }, [filters]);
+    if (allVenues.length > 0) {
+      applyFilters();
+    }
+  }, [filters.sport, filters.city, filters.priceRange, allVenues]);
 
   const loadData = async () => {
     try {
-      const [venuesData, sportsData] = await Promise.all([
-        venueService.getAll(),
-        sportsService.getAll(),
+      const [venuesResponse, sportsResponse] = await Promise.all([
+        apiService.getVenues(),
+        apiService.getSports(),
       ]);
-      setVenues(venuesData);
-      setSports(sportsData);
+      setAllVenues(venuesResponse.venues);
+      setSports(sportsResponse.sports);
     } catch (error) {
       console.error('Error loading venues:', error);
     } finally {
@@ -46,21 +49,20 @@ const Venues = () => {
   };
 
   const applyFilters = async () => {
+    if (filters.sport === 'all' && !filters.city && filters.priceRange[0] === 0 && filters.priceRange[1] === 100) {
+      // No API filters applied, just use all venues
+      return;
+    }
+    
     setLoading(true);
     try {
-      const filteredVenues = await venueService.getAll({
-        sport: filters.sport,
-        city: filters.city,
-        priceRange: filters.priceRange,
+      const venuesResponse = await apiService.getVenues({
+        sport: filters.sport === 'all' ? undefined : filters.sport,
+        city: filters.city || undefined,
+        minPrice: filters.priceRange[0],
+        maxPrice: filters.priceRange[1],
       });
-      
-      // Apply search filter
-      const searchFiltered = filteredVenues.filter(venue =>
-        venue.name.toLowerCase().includes(filters.search.toLowerCase()) ||
-        venue.location.city.toLowerCase().includes(filters.search.toLowerCase())
-      );
-      
-      setVenues(searchFiltered);
+      setAllVenues(venuesResponse.venues);
     } catch (error) {
       console.error('Error filtering venues:', error);
     } finally {
@@ -68,10 +70,25 @@ const Venues = () => {
     }
   };
 
+  // Use useMemo to filter venues by search term without causing re-renders
+  const filteredVenues = useMemo(() => {
+    if (!filters.search.trim()) {
+      return allVenues;
+    }
+    
+    return allVenues.filter(venue => {
+      const venueName = venue.name.toLowerCase();
+      const venueCity = (venue as any).city || venue.location?.city || '';
+      const searchTerm = filters.search.toLowerCase();
+      
+      return venueName.includes(searchTerm) || venueCity.toLowerCase().includes(searchTerm);
+    });
+  }, [allVenues, filters.search]);
+
   const resetFilters = () => {
     setFilters({
       search: '',
-      sport: '',
+      sport: 'all',
       city: '',
       priceRange: [0, 100],
     });
@@ -194,11 +211,11 @@ const Venues = () => {
       {/* Results */}
       <div className="flex items-center justify-between mb-6">
         <p className="text-muted-foreground">
-          {venues.length} venue{venues.length !== 1 ? 's' : ''} found
+          {filteredVenues.length} venue{filteredVenues.length !== 1 ? 's' : ''} found
         </p>
       </div>
 
-      {venues.length === 0 ? (
+      {filteredVenues.length === 0 ? (
         <Card className="p-12 text-center">
           <div className="text-muted-foreground mb-4">
             <MapPin className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -213,7 +230,7 @@ const Venues = () => {
             ? 'md:grid-cols-2 lg:grid-cols-3' 
             : 'grid-cols-1'
         }`}>
-          {venues.map((venue) => (
+          {filteredVenues.map((venue) => (
             <VenueCard key={venue.id} venue={venue} viewMode={viewMode} />
           ))}
         </div>
@@ -222,16 +239,25 @@ const Venues = () => {
   );
 };
 
-const VenueCard = ({ venue, viewMode }: { venue: Venue; viewMode: 'grid' | 'list' }) => {
+const VenueCard = ({ venue, viewMode }: { venue: any; viewMode: 'grid' | 'list' }) => {
+  // Handle different data structures from API vs mock
+  const venueData = {
+    ...venue,
+    location: venue.location || { city: venue.city, state: venue.state },
+    priceRange: venue.priceRange || { min: venue.minPrice, max: venue.maxPrice },
+    photos: venue.photos || [],
+    sports: venue.sports || []
+  };
+
   if (viewMode === 'list') {
     return (
       <Card className="overflow-hidden card-hover">
         <div className="md:flex">
           <div className="md:w-1/3 h-48 md:h-auto bg-muted flex items-center justify-center">
-            {venue.photos[0] ? (
+            {venueData.photos[0] ? (
               <img 
-                src={venue.photos[0]} 
-                alt={venue.name}
+                src={typeof venueData.photos[0] === 'string' ? venueData.photos[0] : venueData.photos[0].url} 
+                alt={venueData.name}
                 className="w-full h-full object-cover"
               />
             ) : (
@@ -241,27 +267,27 @@ const VenueCard = ({ venue, viewMode }: { venue: Venue; viewMode: 'grid' | 'list
           <div className="md:w-2/3 p-6">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h3 className="text-xl font-semibold mb-1">{venue.name}</h3>
+                <h3 className="text-xl font-semibold mb-1">{venueData.name}</h3>
                 <div className="flex items-center text-sm text-muted-foreground mb-2">
                   <MapPin className="h-4 w-4 mr-1" />
-                  {venue.address}
+                  {venueData.address}
                 </div>
               </div>
               <div className="flex items-center space-x-1">
                 <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                <span className="text-sm font-medium">{venue.rating}</span>
+                <span className="text-sm font-medium">{venueData.rating || 0}</span>
                 <span className="text-xs text-muted-foreground">
-                  ({venue.reviewCount})
+                  ({venueData.reviewCount || 0})
                 </span>
               </div>
             </div>
             
             <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
-              {venue.description}
+              {venueData.description}
             </p>
             
             <div className="flex flex-wrap gap-2 mb-4">
-              {venue.sports.map((sport) => (
+              {venueData.sports.map((sport: any) => (
                 <Badge key={sport.id} variant="secondary" className="text-xs">
                   {sport.icon} {sport.name}
                 </Badge>
@@ -272,10 +298,10 @@ const VenueCard = ({ venue, viewMode }: { venue: Venue; viewMode: 'grid' | 'list
               <div className="flex items-center text-sm">
                 <DollarSign className="h-4 w-4 mr-1 text-primary" />
                 <span className="font-medium">
-                  ${venue.priceRange.min}-${venue.priceRange.max}/hr
+                  ${venueData.priceRange.min}-${venueData.priceRange.max}/hr
                 </span>
               </div>
-              <Link to={`/venue/${venue.id}`}>
+              <Link to={`/venue/${venueData.id}`}>
                 <Button variant="hero">
                   View Details
                 </Button>
@@ -290,10 +316,10 @@ const VenueCard = ({ venue, viewMode }: { venue: Venue; viewMode: 'grid' | 'list
   return (
     <Card className="overflow-hidden card-hover">
       <div className="h-48 bg-muted flex items-center justify-center">
-        {venue.photos[0] ? (
+        {venueData.photos[0] ? (
           <img 
-            src={venue.photos[0]} 
-            alt={venue.name}
+            src={typeof venueData.photos[0] === 'string' ? venueData.photos[0] : venueData.photos[0].url}
+            alt={venueData.name}
             className="w-full h-full object-cover"
           />
         ) : (
@@ -302,31 +328,31 @@ const VenueCard = ({ venue, viewMode }: { venue: Venue; viewMode: 'grid' | 'list
       </div>
       <div className="p-6">
         <div className="flex items-start justify-between mb-3">
-          <h3 className="text-lg font-semibold">{venue.name}</h3>
+          <h3 className="text-lg font-semibold">{venueData.name}</h3>
           <div className="flex items-center space-x-1">
             <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-            <span className="text-sm font-medium">{venue.rating}</span>
+            <span className="text-sm font-medium">{venueData.rating || 0}</span>
           </div>
         </div>
         
         <div className="flex items-center text-sm text-muted-foreground mb-3">
           <MapPin className="h-4 w-4 mr-1" />
-          {venue.location.city}, {venue.location.state}
+          {venueData.location.city}, {venueData.location.state}
         </div>
         
         <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-          {venue.description}
+          {venueData.description}
         </p>
         
         <div className="flex flex-wrap gap-1 mb-4">
-          {venue.sports.slice(0, 3).map((sport) => (
+          {venueData.sports.slice(0, 3).map((sport: any) => (
             <Badge key={sport.id} variant="secondary" className="text-xs">
               {sport.icon} {sport.name}
             </Badge>
           ))}
-          {venue.sports.length > 3 && (
+          {venueData.sports.length > 3 && (
             <Badge variant="outline" className="text-xs">
-              +{venue.sports.length - 3} more
+              +{venueData.sports.length - 3} more
             </Badge>
           )}
         </div>
@@ -335,7 +361,7 @@ const VenueCard = ({ venue, viewMode }: { venue: Venue; viewMode: 'grid' | 'list
           <div className="flex items-center text-sm">
             <DollarSign className="h-4 w-4 mr-1 text-primary" />
             <span className="font-medium">
-              ${venue.priceRange.min}-${venue.priceRange.max}/hr
+              ${venueData.priceRange.min}-${venueData.priceRange.max}/hr
             </span>
           </div>
           <div className="flex items-center text-sm text-green-600">
@@ -344,7 +370,7 @@ const VenueCard = ({ venue, viewMode }: { venue: Venue; viewMode: 'grid' | 'list
           </div>
         </div>
         
-        <Link to={`/venue/${venue.id}`}>
+        <Link to={`/venue/${venueData.id}`}>
           <Button variant="hero" className="w-full">
             View Details
           </Button>
