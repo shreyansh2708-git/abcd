@@ -25,6 +25,10 @@ build
 .env.test.local
 .env.production.local
 
+# Allow specific environment files for deployment
+!.env.development
+!.env.production
+
 # Database
 *.db
 *.sqlite
